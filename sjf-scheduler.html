@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SJF Scheduler</title>
+<style>
+:root{
+  --bg:#12151b; --panel:#1a1e26; --panel2:#20252f; --line:#2b303c;
+  --text:#e7e5df; --sub:#8d93a3; --mono:'IBM Plex Mono',monospace; --sans:'Inter',sans-serif;
+  --accent:#4fd1ae; --idle:#3a3f4a;
+  --c0:#4fd1ae;--c1:#e8a15c;--c2:#e8615c;--c3:#7c9cf2;--c4:#c792ea;--c5:#6ec6e8;--c6:#d1e86e;--c7:#f28fb0;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){--bg:#f4f2ec;--panel:#fffdf9;--panel2:#eeece4;--line:#ddd9cc;--text:#1c1c1a;--sub:#6b6a63;--idle:#d8d5c9;}
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);margin:0;padding:1.25rem 1rem 3rem;max-width:760px;margin-inline:auto;-webkit-font-smoothing:antialiased}
+h1{font-size:20px;font-weight:500;margin:0 0 2px;font-family:var(--mono)}
+.sub{color:var(--sub);font-size:13px;margin:0 0 1.5rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1rem 1.1rem;margin-bottom:1rem}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:.75rem}
+.row h2{font-size:13px;text-transform:none;color:var(--sub);font-weight:500;margin:0;letter-spacing:.02em}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:13px;font-family:var(--sans);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:active{transform:scale(.98)}
+button.primary{background:var(--accent);color:#0a1410;border-color:var(--accent);font-weight:500}
+button.ghost{background:transparent}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13px}
+th{color:var(--sub);font-weight:400;text-align:left;padding:4px 6px;font-size:12px}
+td{padding:4px 6px}
+input[type=number]{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:6px 4px;font-family:var(--mono);font-size:13px;text-align:center}
+input[type=number]:focus{outline:none;border-color:var(--accent)}
+.proc-row td:first-child{color:var(--sub)}
+.toggle-wrap{display:flex;align-items:center;justify-content:space-between;background:var(--panel2);border-radius:8px;padding:10px 12px}
+.toggle{width:40px;height:23px;border-radius:12px;background:var(--line);position:relative;cursor:pointer;flex:none}
+.toggle.on{background:var(--accent)}
+.toggle .knob{width:19px;height:19px;border-radius:50%;background:var(--panel);position:absolute;top:2px;left:2px;transition:left .15s}
+.toggle.on .knob{left:19px;background:#0a1410}
+label.small{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:6px}
+.gantt-track{display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--line);min-height:38px}
+.gantt-seg{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:#08110d;border-right:1px solid rgba(0,0,0,.15);min-width:2px;white-space:nowrap;overflow:hidden}
+.gantt-seg.idle{background:var(--idle);color:var(--sub)}
+.gantt-marks{display:flex;font-family:var(--mono);font-size:10px;color:var(--sub);margin-top:3px}
+.gantt-marks span{border-left:1px solid var(--line);padding-left:2px}
+.err{color:#e8615c;font-size:12px;margin-top:4px}
+.stats{display:flex;gap:10px}
+.stat{flex:1;background:var(--panel2);border-radius:8px;padding:10px 12px}
+.stat .l{font-size:11px;color:var(--sub)}
+.stat .v{font-size:19px;font-weight:500;font-family:var(--mono)}
+.section-title{font-family:var(--mono);font-size:12px;color:var(--sub);margin:0 0 8px;letter-spacing:.02em}
+.hidden{display:none}
+.compare-col h3{font-size:13px;font-family:var(--mono);margin:0 0 8px;color:var(--accent)}
+@media(min-width:620px){.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}}
+</style>
+</head>
+<body>
+
+<h1>SJF scheduler</h1>
+<p class="sub">Shortest job first — non-preemptive and preemptive (SRTF)</p>
+
+<div class="card">
+  <div class="row">
+    <h2>Processes</h2>
+    <div style="display:flex;gap:6px">
+      <button id="randomBtn" class="ghost">Random</button>
+      <button id="addBtn" class="ghost">+ Add</button>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>Process</th><th>Arrival</th><th>Burst</th><th></th></tr></thead>
+    <tbody id="procBody"></tbody>
+  </table>
+  <div id="inputErr" class="err hidden"></div>
+</div>
+
+<div class="card">
+  <div class="toggle-wrap">
+    <label class="small" for="preemptToggle" style="color:var(--text)">Preemptive (SRTF)</label>
+    <div class="toggle" id="preemptToggle"><div class="knob"></div></div>
+  </div>
+  <label class="small" style="margin-top:10px">
+    <input type="checkbox" id="compareToggle" style="width:auto"> Compare SJF vs SRTF side by side
+  </label>
+</div>
+
+<div style="display:flex;gap:8px;margin-bottom:1rem">
+  <button id="runBtn" class="primary" style="flex:2">Run scheduler</button>
+  <button id="playBtn" style="flex:1">▶ Step</button>
+  <button id="clearBtn" class="ghost">Clear</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+const COLORS=['c0','c1','c2','c3','c4','c5','c6','c7'];
+let procBody=document.getElementById('procBody');
+let count=0;
+
+function addRow(a,b){
+  count++;
+  const id='P'+count;
+  const tr=document.createElement('tr');
+  tr.className='proc-row';
+  tr.dataset.id=id;
+  tr.innerHTML=`<td>${id}</td>
+    <td><input type="number" min="0" value="${a??0}" class="arr"></td>
+    <td><input type="number" min="1" value="${b??1}" class="bur"></td>
+    <td><button class="ghost rm" style="padding:4px 8px" aria-label="Remove ${id}"><i class="ti ti-x"></i>×</button></td>`;
+  tr.querySelector('.rm').onclick=()=>{tr.remove()};
+  procBody.appendChild(tr);
+}
+[[0,5],[2,3],[4,1]].forEach(([a,b])=>addRow(a,b));
+
+document.getElementById('addBtn').onclick=()=>addRow(0,1);
+document.getElementById('randomBtn').onclick=()=>{
+  procBody.innerHTML=''; count=0;
+  const n=3+Math.floor(Math.random()*4);
+  let t=0;
+  for(let i=0;i<n;i++){
+    t+=Math.floor(Math.random()*3);
+    addRow(t, 1+Math.floor(Math.random()*9));
+  }
+};
+
+const preemptToggle=document.getElementById('preemptToggle');
+preemptToggle.onclick=()=>preemptToggle.classList.toggle('on');
+
+function readProcs(){
+  const rows=[...procBody.querySelectorAll('tr')];
+  const errBox=document.getElementById('inputErr');
+  errBox.classList.add('hidden');
+  if(rows.length===0){errBox.textContent='Add at least one process.';errBox.classList.remove('hidden');return null;}
+  const procs=[];
+  for(const r of rows){
+    const a=parseInt(r.querySelector('.arr').value,10);
+    const b=parseInt(r.querySelector('.bur').value,10);
+    if(isNaN(a)||a<0||isNaN(b)||b<1){
+      errBox.textContent='Arrival must be ≥0 and burst must be ≥1 for every process.';
+      errBox.classList.remove('hidden');
+      return null;
+    }
+    procs.push({id:r.dataset.id, arrival:a, burst:b});
+  }
+  return procs;
+}
+
+function schedule(procs, preemptive){
+  const p=procs.map(x=>({...x, remaining:x.burst, completed:false, ct:0}));
+  let time=0;
+  let done=0, n=p.length, gantt=[];
+  if(!preemptive){
+    while(done<n){
+      let avail=p.filter(x=>!x.completed && x.arrival<=time);
+      if(!avail.length){
+        let next=Math.min(...p.filter(x=>!x.completed).map(x=>x.arrival));
+        gantt.push({id:'idle',start:time,end:next}); time=next; continue;
+      }
+      avail.sort((a,b)=>a.burst-b.burst||a.arrival-b.arrival);
+      const cur=avail[0], start=time;
+      time+=cur.burst; cur.ct=time; cur.completed=true; done++;
+      gantt.push({id:cur.id,start,end:time});
+    }
+  } else {
+    while(done<n){
+      let avail=p.filter(x=>!x.completed && x.arrival<=time);
+      if(!avail.length){
+        let next=Math.min(...p.filter(x=>!x.completed).map(x=>x.arrival));
+        if(gantt.length && gantt[gantt.length-1].id==='idle') gantt[gantt.length-1].end=next;
+        else gantt.push({id:'idle',start:time,end:next});
+        time=next; continue;
+      }
+      avail.sort((a,b)=>a.remaining-b.remaining||a.arrival-b.arrival);
+      const cur=avail[0];
+      if(gantt.length && gantt[gantt.length-1].id===cur.id && gantt[gantt.length-1].end===time){
+        gantt[gantt.length-1].end=time+1;
+      } else gantt.push({id:cur.id,start:time,end:time+1});
+      cur.remaining--; time++;
+      if(cur.remaining===0){cur.completed=true;cur.ct=time;done++;}
+    }
+  }
+  p.forEach(x=>{x.tat=x.ct-x.arrival; x.wt=x.tat-x.burst;});
+  return {procs:p, gantt};
+}
+
+function colorFor(id){
+  const idx=parseInt(id.replace('P',''),10)-1;
+  return COLORS[idx%COLORS.length];
+}
+
+function renderGantt(gantt, animate){
+  const total=gantt[gantt.length-1].end - gantt[0].start;
+  const startT=gantt[0].start;
+  const track=document.createElement('div'); track.className='gantt-track';
+  const marks=document.createElement('div'); marks.className='gantt-marks';
+  gantt.forEach((seg,i)=>{
+    const w=((seg.end-seg.start)/total*100).toFixed(3);
+    const div=document.createElement('div');
+    div.className='gantt-seg'+(seg.id==='idle'?' idle':' c-'+colorFor(seg.id));
+    div.style.width=w+'%';
+    div.style.background=seg.id==='idle'?'var(--idle)':`var(--${colorFor(seg.id)})`;
+    div.textContent=seg.id==='idle'?'':seg.id;
+    if(animate){div.style.opacity='0';}
+    track.appendChild(div);
+    const m=document.createElement('span'); m.style.width=w+'%'; m.textContent=seg.start;
+    marks.appendChild(m);
+  });
+  const last=document.createElement('span'); last.style.width='0'; last.style.borderLeft='1px solid var(--line)'; last.textContent=gantt[gantt.length-1].end;
+  marks.appendChild(last);
+  const wrap=document.createElement('div');
+  wrap.appendChild(track); wrap.appendChild(marks);
+  if(animate){
+    let segs=[...track.children];
+    let i=0;
+    const step=()=>{ if(i<segs.length){segs[i].style.transition='opacity .25s'; segs[i].style.opacity='1'; i++; setTimeout(step,320);} };
+    setTimeout(step,50);
+  }
+  return wrap;
+}
+
+function renderResults(procs){
+  const avgWt=(procs.reduce((s,p)=>s+p.wt,0)/procs.length).toFixed(2);
+  const avgTat=(procs.reduce((s,p)=>s+p.tat,0)/procs.length).toFixed(2);
+  const table=document.createElement('table');
+  table.innerHTML=`<thead><tr><th>Proc</th><th>AT</th><th>BT</th><th>CT</th><th>TAT</th><th>WT</th></tr></thead>
+  <tbody>${procs.slice().sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true})).map(p=>
+    `<tr><td>${p.id}</td><td>${p.arrival}</td><td>${p.burst}</td><td>${p.ct}</td><td>${p.tat}</td><td>${p.wt}</td></tr>`).join('')}
+  <tr style="border-top:1px solid var(--line);color:var(--sub)"><td colspan="4">average</td><td>${avgTat}</td><td>${avgWt}</td></tr>
+  </tbody>`;
+  return {table, avgWt, avgTat};
+}
+
+function buildBlock(procs, preemptive, animate){
+  const {procs:result, gantt}=schedule(procs, preemptive);
+  const card=document.createElement('div'); card.className='card';
+  const title=document.createElement('p'); title.className='section-title';
+  title.textContent=preemptive?'Gantt chart — SRTF (preemptive)':'Gantt chart — SJF (non-preemptive)';
+  card.appendChild(title);
+  card.appendChild(renderGantt(gantt, animate));
+  const {table, avgWt, avgTat}=renderResults(result);
+  const tCard=document.createElement('div'); tCard.className='card';
+  tCard.appendChild(table);
+  const stats=document.createElement('div'); stats.className='stats'; stats.style.marginTop='10px';
+  stats.innerHTML=`<div class="stat"><div class="l">avg waiting time</div><div class="v">${avgWt}</div></div>
+  <div class="stat"><div class="l">avg turnaround time</div><div class="v">${avgTat}</div></div>`;
+  tCard.appendChild(stats);
+  const holder=document.createElement('div');
+  holder.appendChild(card); holder.appendChild(tCard);
+  return holder;
+}
+
+let lastProcs=null, lastPreemptive=false;
+
+function run(animate){
+  const procs=readProcs();
+  if(!procs) return;
+  lastProcs=procs;
+  const out=document.getElementById('output');
+  out.innerHTML='';
+  if(document.getElementById('compareToggle').checked){
+    const grid=document.createElement('div'); grid.className='compare-grid';
+    const left=document.createElement('div'); left.className='compare-col';
+    left.innerHTML='<h3>SJF (non-preemptive)</h3>';
+    left.appendChild(buildBlock(procs,false,animate));
+    const right=document.createElement('div'); right.className='compare-col';
+    right.innerHTML='<h3>SRTF (preemptive)</h3>';
+    right.appendChild(buildBlock(procs,true,animate));
+    grid.appendChild(left); grid.appendChild(right);
+    out.appendChild(grid);
+  } else {
+    const preemptive=preemptToggle.classList.contains('on');
+    lastPreemptive=preemptive;
+    out.appendChild(buildBlock(procs, preemptive, animate));
+  }
+}
+
+document.getElementById('runBtn').onclick=()=>run(false);
+document.getElementById('playBtn').onclick=()=>run(true);
+document.getElementById('clearBtn').onclick=()=>{document.getElementById('output').innerHTML='';};
+
+// initial run
+run(false);
+</script>
+</body>
+</html>
